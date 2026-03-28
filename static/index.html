@@ -49,7 +49,7 @@
     .round-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); font-weight: 700; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
     .matchup-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
     .matchup-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; position: relative; }
-    .matchup-card.settled { opacity: 0.65; }
+    .matchup-card.settled { opacity: 0.85; }
     .matchup-card.locked { border-color: var(--warn); }
     .matchup-sport { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
     .matchup-vs { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
@@ -165,6 +165,7 @@
       <div><p id="admin-confirm-text">🎉 Round complete — next round is ready!</p><small>Click confirm to open betting for the next round</small></div>
       <button class="btn btn-success" id="confirm-btn" onclick="confirmNextRound()">Open Betting</button>
     </div>
+    <div class="round-tabs" id="round-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px"></div>
     <div id="matchup-container"></div>
   </div>
 
@@ -388,32 +389,74 @@ async function loadMatchups() {
   await checkRoundStatus();
 }
 
+let activeRoundTab = null;
+
 function renderMarkets() {
   const container = document.getElementById('matchup-container');
-  if (!matchups.length) { container.innerHTML = '<div class="empty-state">No matchups yet. Admin will add them shortly!</div>'; return; }
+  const tabBar = document.getElementById('round-tabs');
+  if (!matchups.length) {
+    container.innerHTML = '<div class="empty-state">No matchups yet. Admin will add them shortly!</div>';
+    tabBar.innerHTML = '';
+    return;
+  }
 
-  // Group by round — exclude pending (not yet open) matchups from public view
+  // Group by round — exclude pending matchups
   const visible = matchups.filter(m => m.status !== 'pending');
   const groups = {};
   visible.forEach(m => {
-    const key = m.tournament_id ? `t${m.tournament_id}_r${m.round_number ?? 'x'}` : 'standalone';
-    if (!groups[key]) groups[key] = { label: getRoundLabel(m), matchups: [] };
+    const key = m.tournament_id ? `r${m.round_number ?? 'x'}` : 'standalone';
+    if (!groups[key]) groups[key] = { label: getRoundShortLabel(m), fullLabel: getRoundLabel(m), roundNum: m.round_number ?? -1, matchups: [] };
     groups[key].matchups.push(m);
   });
 
-  // Sort groups so highest round (most recent) appears first
-  const sortedGroups = Object.entries(groups).sort((a, b) => {
-    const rA = a[1].matchups[0]?.round_number ?? -1;
-    const rB = b[1].matchups[0]?.round_number ?? -1;
-    return rB - rA;
-  }).map(e => e[1]);
+  // Sort groups: lowest round number first (play-ins first, then R64, etc.)
+  const sortedGroups = Object.entries(groups).sort((a, b) => a[1].roundNum - b[1].roundNum);
 
-  container.innerHTML = sortedGroups.map(g => `
+  // Build tab bar
+  tabBar.innerHTML = sortedGroups.map(([key, g], i) => {
+    const hasOpen = g.matchups.some(m => m.status === 'open');
+    const dot = hasOpen ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent2);margin-left:5px;vertical-align:middle"></span>' : '';
+    return `<div class="tab ${activeRoundTab === key || (activeRoundTab === null && i === 0) ? 'active' : ''}"
+      onclick="switchRoundTab('${key}')" id="rtab-${key}">${g.label}${dot}</div>`;
+  }).join('');
+
+  // Set default active tab
+  if (activeRoundTab === null && sortedGroups.length > 0) {
+    activeRoundTab = sortedGroups[0][0];
+  }
+  // If active tab no longer exists, reset
+  if (!groups[activeRoundTab]) {
+    activeRoundTab = sortedGroups[0]?.[0] ?? null;
+  }
+
+  // Render active group
+  const activeGroup = groups[activeRoundTab];
+  if (!activeGroup) { container.innerHTML = ''; return; }
+
+  container.innerHTML = `
     <div class="round-section">
-      <div class="round-label">${g.label}</div>
-      <div class="matchup-grid">${g.matchups.map(m => cardHTML(m)).join('')}</div>
-    </div>
-  `).join('');
+      <div class="round-label">${activeGroup.fullLabel}</div>
+      <div class="matchup-grid">${activeGroup.matchups.map(m => cardHTML(m)).join('')}</div>
+    </div>`;
+
+  // Auto-load bet panels for settled matchups in view
+  activeGroup.matchups.filter(m => m.status === 'settled').forEach(m => {
+    const nameA = stripCollege(m.player_a);
+    const nameB = stripCollege(m.player_b);
+    apiFetch(`/api/matchups/${m.id}/bets`).then(bets => {
+      renderBetVolume(m.id, nameA, nameB, bets);
+    }).catch(() => {});
+  });
+}
+
+function switchRoundTab(key) {
+  activeRoundTab = key;
+  renderMarkets();
+}
+
+function getRoundShortLabel(m) {
+  const roundNames = {0:'Play-In',1:'R64',2:'R32',3:'Sweet 16',4:'Elite 8',5:'Final Four',6:'Championship'};
+  return roundNames[m.round_number] ?? `Round ${m.round_number}`;
 }
 
 function getRoundLabel(m) {
@@ -469,9 +512,9 @@ function cardHTML(m) {
     <div class="odds-bar"><div class="odds-bar-a" id="bar-${m.id}" style="width:${pctA.toFixed(1)}%"></div></div>
     ${actionHTML}
     ${nextInfo}
-    <span class="bet-volume-toggle" onclick="toggleBetVolume(${m.id}, '${nameA}', '${nameB}')">📊 Show bets</span>
-    <div class="bet-volume-panel" id="vol-${m.id}">
-      <div style="text-align:center;font-size:0.75rem;color:var(--muted)">Loading...</div>
+    <span class="bet-volume-toggle" id="vol-toggle-${m.id}" onclick="toggleBetVolume(${m.id}, '${nameA}', '${nameB}')">📊 ${m.status === 'settled' ? 'Hide bets' : 'Show bets'}</span>
+    <div class="bet-volume-panel ${m.status === 'settled' ? 'open' : ''}" id="vol-${m.id}">
+      <div style="text-align:center;font-size:0.75rem;color:var(--muted)">${m.status === 'settled' ? 'Loading...' : ''}</div>
     </div>
   </div>`;
 }
@@ -806,14 +849,14 @@ const betVolumeCache = {};
 
 async function toggleBetVolume(matchupId, nameA, nameB) {
   const panel = document.getElementById(`vol-${matchupId}`);
-  const toggle = panel.previousElementSibling;
+  const toggle = document.getElementById(`vol-toggle-${matchupId}`);
   if (panel.classList.contains('open')) {
     panel.classList.remove('open');
-    toggle.textContent = '📊 Show bets';
+    if (toggle) toggle.textContent = '📊 Show bets';
     return;
   }
   panel.classList.add('open');
-  toggle.textContent = '📊 Hide bets';
+  if (toggle) toggle.textContent = '📊 Hide bets';
   panel.innerHTML = '<div style="text-align:center;font-size:0.75rem;color:var(--muted)">Loading...</div>';
   try {
     const bets = await apiFetch(`/api/matchups/${matchupId}/bets`);

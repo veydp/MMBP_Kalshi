@@ -110,12 +110,16 @@ def seed_bracket(db, tournament_id: int, sport: str = "MMBP 2026"):
 
     print("Creating Round of 64 matchups...")
     for (pos, pa, sa, pb, sb) in all_r64:
+        # Open immediately if both players are known (no play-in feeding this slot)
+        no_playin_positions = {5, 6, 7, 8, 12, 14, 15, 19, 22, 24, 25, 26, 27, 30, 31, 32}
+        initial_status = "open" if pos in no_playin_positions else "pending"
+        odds_a, odds_b = be.get_seed_odds(sa, sb)
         m = models.Matchup(
             player_a=pa, player_b=pb,
             seed_a=sa, seed_b=sb,
             sport=sport,
-            odds_a=2.0, odds_b=2.0,
-            status="pending",  # opens after play-ins resolve
+            odds_a=odds_a, odds_b=odds_b,
+            status=initial_status,
             tournament_id=tournament_id,
             round_number=1,
             bracket_position=pos,
