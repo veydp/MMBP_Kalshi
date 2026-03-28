@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Tournament Betting Market</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --card: #1a1d27;
+      --card2: #222535;
+      --border: #2e3347;
+      --accent: #6c63ff;
+      --accent2: #00c896;
+      --danger: #ff4d6d;
+      --warn: #ffaa00;
+      --text: #e8eaf6;
+      --muted: #8a8fa8;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+    /* ── Nav ── */
+    nav {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 60px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .nav-brand { font-size: 1.2rem; font-weight: 700; color: var(--accent); letter-spacing: 0.5px; }
+    .nav-right { display: flex; align-items: center; gap: 16px; }
+    .balance-pill {
+      background: var(--card2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--accent2);
+    }
+    .nav-user { font-size: 0.85rem; color: var(--muted); }
+    .btn { cursor: pointer; border: none; border-radius: 8px; padding: 8px 18px; font-size: 0.85rem; font-weight: 600; transition: opacity 0.15s; }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-success { background: var(--accent2); color: #000; }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-sm { padding: 5px 12px; font-size: 0.78rem; }
+
+    /* ── Auth overlay ── */
+    #auth-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+      display: flex; align-items: center; justify-content: center; z-index: 999;
+    }
+    .auth-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 40px;
+      width: 360px;
+    }
+    .auth-card h2 { margin-bottom: 24px; font-size: 1.4rem; }
+    .auth-tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+    .auth-tab { flex: 1; padding: 8px; text-align: center; cursor: pointer; border-radius: 8px; font-weight: 600; font-size: 0.85rem; color: var(--muted); background: var(--card2); border: 1px solid var(--border); }
+    .auth-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; }
+    .form-group input, .form-group select {
+      width: 100%; padding: 10px 14px; background: var(--card2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 0.9rem;
+    }
+    .form-group input:focus, .form-group select:focus { outline: 2px solid var(--accent); }
+    .auth-error { color: var(--danger); font-size: 0.8rem; margin-top: 8px; min-height: 18px; }
+
+    /* ── Main layout ── */
+    main { max-width: 1100px; margin: 0 auto; padding: 28px 20px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 28px; flex-wrap: wrap; }
+    .tab { padding: 8px 20px; border-radius: 20px; cursor: pointer; font-weight: 600; font-size: 0.85rem;
+           color: var(--muted); background: var(--card2); border: 1px solid var(--border); }
+    .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    /* ── Matchup cards ── */
+    .matchup-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; }
+    .matchup-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px;
+      position: relative; overflow: hidden;
+    }
+    .matchup-card.settled { opacity: 0.7; }
+    .matchup-sport { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 10px; }
+    .matchup-vs { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .player { flex: 1; text-align: center; }
+    .player-name { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
+    .player-odds { font-size: 1.4rem; font-weight: 800; color: var(--accent); }
+    .player-odds.shifted-up { color: var(--accent2); }
+    .player-odds.shifted-down { color: var(--danger); }
+    .vs-badge { font-size: 0.75rem; color: var(--muted); font-weight: 700; padding: 0 12px; }
+    .odds-bar { height: 6px; border-radius: 3px; background: var(--card2); margin-bottom: 14px; overflow: hidden; display: flex; }
+    .odds-bar-a { background: var(--accent); transition: width 0.5s ease; }
+    .odds-bar-b { background: var(--accent2); flex: 1; }
+    .bet-row { display: flex; gap: 8px; align-items: center; }
+    .bet-row input { flex: 1; padding: 8px 12px; background: var(--card2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 0.85rem; }
+    .pick-btns { display: flex; gap: 6px; }
+    .pick-btn {
+      padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); cursor: pointer;
+      font-size: 0.78rem; font-weight: 700; background: var(--card2); color: var(--text);
+      transition: all 0.15s;
+    }
+    .pick-btn:hover, .pick-btn.selected { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .bet-submit { margin-top: 10px; width: 100%; }
+    .status-badge {
+      display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .status-open { background: rgba(0,200,150,0.15); color: var(--accent2); }
+    .status-closed { background: rgba(255,170,0,0.15); color: var(--warn); }
+    .status-settled { background: rgba(255,77,109,0.15); color: var(--danger); }
+    .winner-badge { margin-top: 10px; text-align: center; font-size: 0.85rem; font-weight: 600; color: var(--accent2); }
+    .card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .payout-hint { font-size: 0.75rem; color: var(--muted); }
+
+    /* ── Admin panel ── */
+    .admin-section { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 24px; }
+    .admin-section h3 { margin-bottom: 18px; font-size: 1rem; }
+    .admin-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .admin-form .full-row { grid-column: 1 / -1; }
+    .matchup-admin-row { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    .matchup-admin-label { flex: 1; font-size: 0.85rem; min-width: 120px; }
+    .odds-input-pair { display: flex; gap: 6px; align-items: center; font-size: 0.78rem; }
+    .odds-input-pair input { width: 64px; padding: 6px 8px; background: var(--card2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
+
+    /* ── Bets history ── */
+    .bet-list { display: flex; flex-direction: column; gap: 10px; }
+    .bet-item { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .bet-info { flex: 1; }
+    .bet-match { font-size: 0.85rem; font-weight: 700; }
+    .bet-detail { font-size: 0.75rem; color: var(--muted); margin-top: 3px; }
+    .bet-amount { font-size: 1rem; font-weight: 700; }
+    .bet-outcome { font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 20px; }
+    .bet-win { background: rgba(0,200,150,0.15); color: var(--accent2); }
+    .bet-loss { background: rgba(255,77,109,0.15); color: var(--danger); }
+    .bet-pending { background: rgba(108,99,255,0.15); color: var(--accent); }
+
+    /* ── Leaderboard ── */
+    .leaderboard-table { width: 100%; border-collapse: collapse; }
+    .leaderboard-table th { text-align: left; padding: 10px 14px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); border-bottom: 1px solid var(--border); }
+    .leaderboard-table td { padding: 12px 14px; font-size: 0.88rem; border-bottom: 1px solid var(--border); }
+    .leaderboard-table tr:last-child td { border-bottom: none; }
+    .rank-1 { color: gold; font-weight: 800; }
+    .rank-2 { color: silver; font-weight: 700; }
+    .rank-3 { color: #cd7f32; font-weight: 700; }
+    .you-row td { background: rgba(108,99,255,0.07); }
+
+    /* ── Toast ── */
+    #toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: var(--card2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 22px; font-size: 0.85rem; font-weight: 600; z-index: 9999; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+    #toast.show { opacity: 1; }
+    #toast.success { border-color: var(--accent2); color: var(--accent2); }
+    #toast.error { border-color: var(--danger); color: var(--danger); }
+
+    /* ── Live dot ── */
+    .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent2); margin-right: 6px; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+
+<!-- Auth Overlay -->
+<div id="auth-overlay">
+  <div class="auth-card">
+    <h2>🏆 Tournament Betting</h2>
+    <div class="auth-tabs">
+      <div class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Login</div>
+      <div class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Register</div>
+    </div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="auth-username" placeholder="username" />
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="auth-password" placeholder="password" onkeydown="if(event.key==='Enter')submitAuth()" />
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:4px" onclick="submitAuth()">Continue</button>
+    <div class="auth-error" id="auth-error"></div>
+  </div>
+</div>
+
+<!-- Nav -->
+<nav>
+  <div class="nav-brand">🏆 Tournament Market</div>
+  <div class="nav-right">
+    <span><span class="live-dot"></span><span style="font-size:0.75rem;color:var(--muted)">Live</span></span>
+    <div class="balance-pill">💰 <span id="nav-balance">0</span> pts</div>
+    <span class="nav-user" id="nav-username"></span>
+    <button class="btn btn-ghost btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<!-- Main -->
+<main id="main-app" style="display:none">
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('markets')">Markets</div>
+    <div class="tab" onclick="showTab('mybets')">My Bets</div>
+    <div class="tab" onclick="showTab('leaderboard')">Leaderboard</div>
+    <div class="tab" id="admin-tab" style="display:none" onclick="showTab('admin')">⚙️ Admin</div>
+  </div>
+
+  <!-- Markets -->
+  <div id="tab-markets">
+    <div class="matchup-grid" id="matchup-grid">
+      <div class="empty-state">Loading matchups…</div>
+    </div>
+  </div>
+
+  <!-- My Bets -->
+  <div id="tab-mybets" style="display:none">
+    <div class="bet-list" id="bet-list">
+      <div class="empty-state">No bets placed yet.</div>
+    </div>
+  </div>
+
+  <!-- Leaderboard -->
+  <div id="tab-leaderboard" style="display:none">
+    <div class="admin-section">
+      <table class="leaderboard-table">
+        <thead><tr><th>#</th><th>Player</th><th>Balance</th><th>Bets</th><th>Won</th><th>Win %</th></tr></thead>
+        <tbody id="leaderboard-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Admin -->
+  <div id="tab-admin" style="display:none">
+    <div class="admin-section">
+      <h3>Create Matchup</h3>
+      <div class="admin-form">
+        <div class="form-group">
+          <label>Player A</label>
+          <input type="text" id="adm-player-a" placeholder="e.g. Alice" />
+        </div>
+        <div class="form-group">
+          <label>Player B</label>
+          <input type="text" id="adm-player-b" placeholder="e.g. Bob" />
+        </div>
+        <div class="form-group">
+          <label>Sport / Game</label>
+          <input type="text" id="adm-sport" placeholder="e.g. Ping Pong" />
+        </div>
+        <div class="form-group">
+          <label>Starting Odds A</label>
+          <input type="number" id="adm-odds-a" value="2.0" step="0.05" min="1.05" />
+        </div>
+        <div class="form-group">
+          <label>Starting Odds B</label>
+          <input type="number" id="adm-odds-b" value="2.0" step="0.05" min="1.05" />
+        </div>
+        <div class="full-row">
+          <button class="btn btn-primary" onclick="createMatchup()">Create Matchup</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="admin-section">
+      <h3>Manage Matchups</h3>
+      <div id="admin-matchup-list"></div>
+    </div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+  const API = '';
+  let token = localStorage.getItem('token');
+  let currentUser = null;
+  let matchups = [];
+  let ws = null;
+  let authMode = 'login';
+
+  // ── Auth ──────────────────────────────────────────────────────────────────
+
+  function switchAuthTab(mode) {
+    authMode = mode;
+    document.getElementById('tab-login').classList.toggle('active', mode === 'login');
+    document.getElementById('tab-register').classList.toggle('active', mode === 'register');
+    document.getElementById('auth-error').textContent = '';
+  }
+
+  async function submitAuth() {
+    const username = document.getElementById('auth-username').value.trim();
+    const password = document.getElementById('auth-password').value;
+    if (!username || !password) return;
+    const endpoint = authMode === 'login' ? '/api/login' : '/api/register';
+    try {
+      if (authMode === 'register') {
+        const r = await apiFetch('/api/register', 'POST', { username, password });
+      }
+      const r = await apiFetch('/api/login', 'POST', { username, password });
+      token = r.access_token;
+      localStorage.setItem('token', token);
+      await initApp();
+    } catch (e) {
+      document.getElementById('auth-error').textContent = e.message || 'Error';
+    }
+  }
+
+  function logout() {
+    token = null;
+    currentUser = null;
+    localStorage.removeItem('token');
+    if (ws) ws.close();
+    document.getElementById('auth-overlay').style.display = 'flex';
+    document.getElementById('main-app').style.display = 'none';
+  }
+
+  // ── App init ──────────────────────────────────────────────────────────────
+
+  async function initApp() {
+    try {
+      currentUser = await apiFetch('/api/me');
+      document.getElementById('auth-overlay').style.display = 'none';
+      document.getElementById('main-app').style.display = 'block';
+      document.getElementById('nav-username').textContent = currentUser.username;
+      updateBalance(currentUser.balance);
+      if (currentUser.is_admin) document.getElementById('admin-tab').style.display = '';
+      await loadMatchups();
+      connectWebSocket();
+    } catch(e) {
+      localStorage.removeItem('token');
+      token = null;
+    }
+  }
+
+  function updateBalance(bal) {
+    document.getElementById('nav-balance').textContent = bal.toFixed(0);
+  }
+
+  // ── WebSocket ─────────────────────────────────────────────────────────────
+
+  function connectWebSocket() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${location.host}/ws`);
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'odds_update') {
+        const m = matchups.find(x => x.id === msg.matchup_id);
+        if (m) {
+          const prevA = m.odds_a, prevB = m.odds_b;
+          m.odds_a = msg.odds_a;
+          m.odds_b = msg.odds_b;
+          updateMatchupCard(m, prevA, prevB);
+        }
+      } else if (msg.type === 'matchup_settled') {
+        loadMatchups(); // reload everything when settled
+      }
+    };
+    ws.onclose = () => setTimeout(connectWebSocket, 3000);
+  }
+
+  // ── Matchups ──────────────────────────────────────────────────────────────
+
+  async function loadMatchups() {
+    matchups = await apiFetch('/api/matchups');
+    renderMatchups();
+    if (currentUser.is_admin) renderAdminMatchups();
+  }
+
+  function renderMatchups() {
+    const grid = document.getElementById('matchup-grid');
+    if (!matchups.length) { grid.innerHTML = '<div class="empty-state">No matchups yet. An admin will add them shortly!</div>'; return; }
+    grid.innerHTML = matchups.map(m => matchupCardHTML(m)).join('');
+  }
+
+  function matchupCardHTML(m) {
+    const pctA = (1/m.odds_a) / (1/m.odds_a + 1/m.odds_b) * 100;
+    const isSettled = m.status === 'settled';
+    const statusClass = { open: 'status-open', closed: 'status-closed', settled: 'status-settled' }[m.status];
+    return `
+    <div class="matchup-card ${isSettled ? 'settled' : ''}" id="card-${m.id}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span class="matchup-sport">${m.sport}</span>
+        <span class="status-badge ${statusClass}">${m.status}</span>
+      </div>
+      <div class="matchup-vs">
+        <div class="player">
+          <div class="player-name">${m.player_a}</div>
+          <div class="player-odds" id="odds-a-${m.id}">${m.odds_a.toFixed(2)}x</div>
+          <div style="font-size:0.72rem;color:var(--muted);margin-top:2px">${(100/m.odds_a).toFixed(1)}% implied</div>
+        </div>
+        <div class="vs-badge">VS</div>
+        <div class="player">
+          <div class="player-name">${m.player_b}</div>
+          <div class="player-odds" id="odds-b-${m.id}">${m.odds_b.toFixed(2)}x</div>
+          <div style="font-size:0.72rem;color:var(--muted);margin-top:2px">${(100/m.odds_b).toFixed(1)}% implied</div>
+        </div>
+      </div>
+      <div class="odds-bar">
+        <div class="odds-bar-a" id="bar-a-${m.id}" style="width:${pctA.toFixed(1)}%"></div>
+      </div>
+      ${isSettled
+        ? `<div class="winner-badge">🏅 Winner: ${m.winner === 'A' ? m.player_a : m.player_b}</div>`
+        : m.status === 'open' ? `
+        <div class="bet-row">
+          <input type="number" id="bet-amt-${m.id}" placeholder="Points" min="1" step="1" oninput="updatePayout(${m.id})" />
+          <div class="pick-btns">
+            <button class="pick-btn" id="pick-a-${m.id}" onclick="selectPick(${m.id},'A')">${m.player_a}</button>
+            <button class="pick-btn" id="pick-b-${m.id}" onclick="selectPick(${m.id},'B')">${m.player_b}</button>
+          </div>
+        </div>
+        <button class="btn btn-primary bet-submit" onclick="placeBet(${m.id})">Place Bet</button>
+        <div class="card-footer">
+          <span class="payout-hint" id="payout-hint-${m.id}">Select pick & enter amount</span>
+        </div>` : '<div class="winner-badge" style="color:var(--warn)">Betting Closed</div>'
+      }
+    </div>`;
+  }
+
+  function updateMatchupCard(m, prevA, prevB) {
+    const elA = document.getElementById(`odds-a-${m.id}`);
+    const elB = document.getElementById(`odds-b-${m.id}`);
+    const bar = document.getElementById(`bar-a-${m.id}`);
+    if (!elA) return;
+    const pctA = (1/m.odds_a) / (1/m.odds_a + 1/m.odds_b) * 100;
+    elA.textContent = m.odds_a.toFixed(2) + 'x';
+    elB.textContent = m.odds_b.toFixed(2) + 'x';
+    elA.className = 'player-odds ' + (m.odds_a > prevA ? 'shifted-up' : m.odds_a < prevA ? 'shifted-down' : '');
+    elB.className = 'player-odds ' + (m.odds_b > prevB ? 'shifted-up' : m.odds_b < prevB ? 'shifted-down' : '');
+    if (bar) bar.style.width = pctA.toFixed(1) + '%';
+    setTimeout(() => {
+      if (elA) elA.className = 'player-odds';
+      if (elB) elB.className = 'player-odds';
+    }, 2000);
+    updatePayout(m.id);
+  }
+
+  let picks = {};
+
+  function selectPick(matchupId, pick) {
+    picks[matchupId] = pick;
+    const a = document.getElementById(`pick-a-${matchupId}`);
+    const b = document.getElementById(`pick-b-${matchupId}`);
+    a.classList.toggle('selected', pick === 'A');
+    b.classList.toggle('selected', pick === 'B');
+    updatePayout(matchupId);
+  }
+
+  function updatePayout(matchupId) {
+    const amt = parseFloat(document.getElementById(`bet-amt-${matchupId}`)?.value || 0);
+    const pick = picks[matchupId];
+    const m = matchups.find(x => x.id === matchupId);
+    const hint = document.getElementById(`payout-hint-${matchupId}`);
+    if (!hint || !m) return;
+    if (!pick || !amt) { hint.textContent = 'Select pick & enter amount'; return; }
+    const odds = pick === 'A' ? m.odds_a : m.odds_b;
+    hint.textContent = `Payout if win: ${(amt * odds).toFixed(0)} pts (${odds.toFixed(2)}x)`;
+  }
+
+  async function placeBet(matchupId) {
+    const amt = parseFloat(document.getElementById(`bet-amt-${matchupId}`)?.value || 0);
+    const pick = picks[matchupId];
+    if (!pick) { toast('Select a player to bet on', 'error'); return; }
+    if (!amt || amt <= 0) { toast('Enter a valid amount', 'error'); return; }
+    try {
+      await apiFetch('/api/bets', 'POST', { matchup_id: matchupId, pick, amount: amt });
+      currentUser = await apiFetch('/api/me');
+      updateBalance(currentUser.balance);
+      toast(`Bet placed on ${pick === 'A' ? matchups.find(x=>x.id===matchupId)?.player_a : matchups.find(x=>x.id===matchupId)?.player_b}!`, 'success');
+      document.getElementById(`bet-amt-${matchupId}`).value = '';
+      picks[matchupId] = null;
+      selectPick(matchupId, null);
+    } catch(e) { toast(e.message, 'error'); }
+  }
+
+  // ── My Bets ───────────────────────────────────────────────────────────────
+
+  async function loadMyBets() {
+    const bets = await apiFetch('/api/bets/me');
+    const el = document.getElementById('bet-list');
+    if (!bets.length) { el.innerHTML = '<div class="empty-state">No bets placed yet.</div>'; return; }
+    el.innerHTML = bets.map(b => {
+      const m = matchups.find(x => x.id === b.matchup_id);
+      const pickedName = m ? (b.pick === 'A' ? m.player_a : m.player_b) : b.pick;
+      const cls = b.settled ? (b.won ? 'bet-win' : 'bet-loss') : 'bet-pending';
+      const label = b.settled ? (b.won ? `+${b.potential_payout.toFixed(0)} pts` : `-${b.amount.toFixed(0)} pts`) : 'Pending';
+      return `<div class="bet-item">
+        <div class="bet-info">
+          <div class="bet-match">${m ? `${m.player_a} vs ${m.player_b}` : 'Match #'+b.matchup_id}</div>
+          <div class="bet-detail">Picked <strong>${pickedName}</strong> · ${b.odds_at_bet.toFixed(2)}x odds · ${new Date(b.created_at).toLocaleString()}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="bet-amount">${b.amount.toFixed(0)} pts</div>
+          <div class="bet-outcome ${cls}">${label}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Leaderboard ───────────────────────────────────────────────────────────
+
+  async function loadLeaderboard() {
+    const board = await apiFetch('/api/leaderboard');
+    const tbody = document.getElementById('leaderboard-body');
+    tbody.innerHTML = board.map((e, i) => {
+      const rank = i === 0 ? 'rank-1' : i === 1 ? 'rank-2' : i === 2 ? 'rank-3' : '';
+      const isYou = e.username === currentUser.username;
+      const pct = e.total_bets ? ((e.total_won / e.total_bets) * 100).toFixed(0) + '%' : '—';
+      return `<tr class="${isYou ? 'you-row' : ''}">
+        <td class="${rank}">${i+1}</td>
+        <td>${e.username}${isYou ? ' <span style="font-size:0.7rem;color:var(--accent)">(you)</span>' : ''}</td>
+        <td style="font-weight:700;color:var(--accent2)">${e.balance.toFixed(0)}</td>
+        <td>${e.total_bets}</td>
+        <td>${e.total_won}</td>
+        <td>${pct}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── Admin ─────────────────────────────────────────────────────────────────
+
+  async function createMatchup() {
+    const a = document.getElementById('adm-player-a').value.trim();
+    const b = document.getElementById('adm-player-b').value.trim();
+    const sport = document.getElementById('adm-sport').value.trim() || 'Sport';
+    const oddsA = parseFloat(document.getElementById('adm-odds-a').value);
+    const oddsB = parseFloat(document.getElementById('adm-odds-b').value);
+    if (!a || !b) { toast('Enter both player names', 'error'); return; }
+    await apiFetch('/api/matchups', 'POST', { player_a: a, player_b: b, sport, odds_a: oddsA, odds_b: oddsB });
+    toast('Matchup created!', 'success');
+    document.getElementById('adm-player-a').value = '';
+    document.getElementById('adm-player-b').value = '';
+    await loadMatchups();
+  }
+
+  function renderAdminMatchups() {
+    const el = document.getElementById('admin-matchup-list');
+    if (!matchups.length) { el.innerHTML = '<div class="empty-state">No matchups yet.</div>'; return; }
+    el.innerHTML = matchups.map(m => `
+      <div class="matchup-admin-row">
+        <div class="matchup-admin-label"><strong>${m.player_a}</strong> vs <strong>${m.player_b}</strong> <span style="color:var(--muted);font-size:0.75rem">(${m.status})</span></div>
+        ${m.status !== 'settled' ? `
+        <div class="odds-input-pair">
+          Odds A: <input type="number" id="oadm-a-${m.id}" value="${m.odds_a}" step="0.05" min="1.05" style="width:60px"/>
+          Odds B: <input type="number" id="oadm-b-${m.id}" value="${m.odds_b}" step="0.05" min="1.05" style="width:60px"/>
+          <button class="btn btn-ghost btn-sm" onclick="adminSetOdds(${m.id})">Set Odds</button>
+        </div>
+        <button class="btn btn-success btn-sm" onclick="settleMatchup(${m.id},'A')">🏅 ${m.player_a} Wins</button>
+        <button class="btn btn-success btn-sm" onclick="settleMatchup(${m.id},'B')">🏅 ${m.player_b} Wins</button>
+        ` : `<span style="color:var(--accent2);font-size:0.8rem">Winner: ${m.winner === 'A' ? m.player_a : m.player_b}</span>`}
+      </div>`).join('');
+  }
+
+  async function adminSetOdds(matchupId) {
+    const a = parseFloat(document.getElementById(`oadm-a-${matchupId}`).value);
+    const b = parseFloat(document.getElementById(`oadm-b-${matchupId}`).value);
+    await apiFetch(`/api/matchups/${matchupId}/odds`, 'PATCH', { odds_a: a, odds_b: b });
+    toast('Odds updated!', 'success');
+  }
+
+  async function settleMatchup(matchupId, winner) {
+    const m = matchups.find(x => x.id === matchupId);
+    const name = winner === 'A' ? m.player_a : m.player_b;
+    if (!confirm(`Declare ${name} the winner? This cannot be undone.`)) return;
+    await apiFetch(`/api/matchups/${matchupId}/result`, 'PATCH', { winner });
+    toast(`${name} declared winner!`, 'success');
+    await loadMatchups();
+  }
+
+  // ── Tabs ──────────────────────────────────────────────────────────────────
+
+  function showTab(name) {
+    ['markets','mybets','leaderboard','admin'].forEach(t => {
+      document.getElementById(`tab-${t}`).style.display = t === name ? '' : 'none';
+    });
+    document.querySelectorAll('.tab').forEach((el, i) => {
+      el.classList.toggle('active', el.textContent.toLowerCase().includes(name) || (name === 'admin' && el.textContent.includes('Admin')));
+    });
+    if (name === 'mybets') loadMyBets();
+    if (name === 'leaderboard') loadLeaderboard();
+  }
+
+  // ── API helper ────────────────────────────────────────────────────────────
+
+  async function apiFetch(path, method = 'GET', body = null) {
+    const opts = {
+      method,
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(API + path, opts);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Request failed');
+    return data;
+  }
+
+  // ── Toast ─────────────────────────────────────────────────────────────────
+
+  function toast(msg, type = 'success') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = `show ${type}`;
+    clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(() => el.className = '', 3000);
+  }
+
+  // ── Boot ──────────────────────────────────────────────────────────────────
+
+  if (token) initApp();
+</script>
+</body>
+</html>
