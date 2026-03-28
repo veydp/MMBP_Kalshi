@@ -243,3 +243,31 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+
+# ── Delete matchup ────────────────────────────────────────────────────────────
+
+@app.delete("/api/matchups/{matchup_id}")
+async def delete_matchup(matchup_id: int, db: Session = Depends(get_db),
+                         current_user=Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    ok = be.delete_matchup(db, matchup_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Matchup not found")
+    await manager.broadcast({"type": "matchup_deleted", "matchup_id": matchup_id})
+    return {"ok": True}
+
+
+# ── Fix matchup round ─────────────────────────────────────────────────────────
+
+@app.patch("/api/matchups/{matchup_id}/fix_round")
+async def fix_round(matchup_id: int, round_number: int, db: Session = Depends(get_db),
+                    current_user=Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    m = be.fix_matchup_round(db, matchup_id, round_number)
+    if not m:
+        raise HTTPException(status_code=404, detail="Matchup not found")
+    await manager.broadcast({"type": "matchups_updated"})
+    return {"ok": True}

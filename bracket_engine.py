@@ -1,11 +1,7 @@
 """
 Bracket Engine
 --------------
-Handles March Madness style bracket automation:
-- Setup tournament with play-in + 64-team bracket
-- Auto-advance winners to next matchup
-- Auto-create next round when all current round matchups are settled
-- Seed-based odds calculation
+Handles March Madness style bracket automation.
 """
 
 from sqlalchemy.orm import Session
@@ -21,7 +17,6 @@ ROUND_NAMES = {
     6: "Championship",
 }
 
-# Seed-based decimal odds (seed_a vs seed_b)
 SEED_ODDS = {
     (1, 16): (1.05, 12.0),
     (2, 15): (1.15, 7.0),
@@ -35,12 +30,10 @@ SEED_ODDS = {
 
 
 def get_seed_odds(seed_a, seed_b):
-    """Return decimal odds based on seeds, defaulting to even if unknown."""
     if seed_a and seed_b:
         key = (min(seed_a, seed_b), max(seed_a, seed_b))
         if key in SEED_ODDS:
             base_a, base_b = SEED_ODDS[key]
-            # Flip if seed_a is actually the higher seed number (worse seed)
             if seed_a > seed_b:
                 return base_b, base_a
             return base_a, base_b
@@ -67,6 +60,10 @@ def add_matchup_to_tournament(db: Session, tournament_id: int, player_a: str, pl
                                seed_a: int, seed_b: int, round_number: int, bracket_position: int,
                                sport: str = "MMBP 2026"):
     odds_a, odds_b = get_seed_odds(seed_a, seed_b)
+    # New matchups that are NOT the current round start as "pending" so they don't show as bettable yet
+    t = get_tournament(db, tournament_id)
+    current_round = t.current_round if t else 0
+    status = "open" if round_number <= current_round else "pending"
     m = models.Matchup(
         player_a=player_a,
         player_b=player_b,
@@ -75,7 +72,7 @@ def add_matchup_to_tournament(db: Session, tournament_id: int, player_a: str, pl
         sport=sport,
         odds_a=odds_a,
         odds_b=odds_b,
-        status="open",
+        status=status,
         tournament_id=tournament_id,
         round_number=round_number,
         bracket_position=bracket_position,
@@ -87,7 +84,6 @@ def add_matchup_to_tournament(db: Session, tournament_id: int, player_a: str, pl
 
 
 def link_matchups(db: Session, matchup_id: int, next_matchup_id: int, next_slot: str):
-    """Tell matchup where winner should go."""
     m = db.query(models.Matchup).filter(models.Matchup.id == matchup_id).first()
     m.next_matchup_id = next_matchup_id
     m.next_slot = next_slot
@@ -95,18 +91,21 @@ def link_matchups(db: Session, matchup_id: int, next_matchup_id: int, next_slot:
 
 
 def advance_winner(db: Session, matchup: models.Matchup):
-    """Place winner name into the next matchup slot."""
+    """Place winner name into the next matchup slot. If both slots filled, open betting."""
     if not matchup.next_matchup_id or not matchup.winner_name:
         return
     next_m = db.query(models.Matchup).filter(models.Matchup.id == matchup.next_matchup_id).first()
     if not next_m:
         return
+
+    winner_seed = matchup.seed_a if matchup.winner == "A" else matchup.seed_b
+
     if matchup.next_slot == "A":
         next_m.player_a = matchup.winner_name
-        next_m.seed_a = matchup.seed_a if matchup.winner == "A" else matchup.seed_b
+        next_m.seed_a = winner_seed
     else:
         next_m.player_b = matchup.winner_name
-        next_m.seed_b = matchup.seed_a if matchup.winner == "A" else matchup.seed_b
+        next_m.seed_b = winner_seed
 
     # Recalculate odds now that we know both seeds
     if next_m.seed_a and next_m.seed_b:
@@ -114,14 +113,49 @@ def advance_winner(db: Session, matchup: models.Matchup):
         next_m.odds_a = odds_a
         next_m.odds_b = odds_b
 
+    # If neither player is still a TBD placeholder, open the matchup for betting
+    a_ready = next_m.player_a and "TBD" not in next_m.player_a and "winner" not in next_m.player_a.lower()
+    b_ready = next_m.player_b and "TBD" not in next_m.player_b and "winner" not in next_m.player_b.lower()
+    if a_ready and b_ready and next_m.status == "pending":
+        next_m.status = "open"
+
     db.commit()
 
 
+def delete_matchup(db: Session, matchup_id: int) -> bool:
+    """Delete a matchup and its bets. Returns False if matchup has settled bets."""
+    m = db.query(models.Matchup).filter(models.Matchup.id == matchup_id).first()
+    if not m:
+        return False
+    # Refund any unsettled bets
+    bets = db.query(models.Bet).filter(models.Bet.matchup_id == matchup_id).all()
+    for bet in bets:
+        if not bet.settled:
+            user = db.query(models.User).filter(models.User.id == bet.user_id).first()
+            if user:
+                user.balance += bet.amount
+        db.delete(bet)
+    db.delete(m)
+    db.commit()
+    return True
+
+
+def fix_matchup_round(db: Session, matchup_id: int, round_number: int):
+    """Fix a matchup's round number."""
+    m = db.query(models.Matchup).filter(models.Matchup.id == matchup_id).first()
+    if not m:
+        return None
+    m.round_number = round_number
+    db.commit()
+    db.refresh(m)
+    return m
+
+
 def check_round_complete(db: Session, tournament_id: int, round_number: int) -> bool:
-    """Return True if all matchups in this round are settled."""
     matchups = db.query(models.Matchup).filter(
         models.Matchup.tournament_id == tournament_id,
         models.Matchup.round_number == round_number,
+        models.Matchup.status != "pending",
     ).all()
     if not matchups:
         return False
@@ -136,7 +170,6 @@ def get_round_matchups(db: Session, tournament_id: int, round_number: int):
 
 
 def get_pending_next_round(db: Session, tournament_id: int):
-    """Return next round matchups that are ready but not yet opened."""
     t = get_tournament(db, tournament_id)
     if not t:
         return None, None
@@ -146,14 +179,12 @@ def get_pending_next_round(db: Session, tournament_id: int):
 
 
 def confirm_next_round(db: Session, tournament_id: int):
-    """Admin confirms — open betting on next round."""
     t = get_tournament(db, tournament_id)
     next_round = t.current_round + 1
     matchups = get_round_matchups(db, tournament_id, next_round)
     for m in matchups:
-        m.status = "open"
+        if m.status == "pending":
+            m.status = "open"
     t.current_round = next_round
-    if next_round == 6:
-        pass  # Championship — keep active
     db.commit()
     return matchups

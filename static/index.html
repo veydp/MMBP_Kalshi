@@ -335,6 +335,8 @@ function connectWS() {
       await loadMatchups();
       currentUser = await apiFetch('/api/me');
       document.getElementById('nav-balance').textContent = currentUser.balance.toFixed(0);
+    } else if (msg.type === 'matchup_deleted' || msg.type === 'matchups_updated') {
+      await loadMatchups();
     } else if (msg.type === 'round_complete') {
       toast(`🏆 ${msg.round_name} complete! Waiting for admin to open next round.`, 'info');
       await checkRoundStatus();
@@ -358,9 +360,10 @@ function renderMarkets() {
   const container = document.getElementById('matchup-container');
   if (!matchups.length) { container.innerHTML = '<div class="empty-state">No matchups yet. Admin will add them shortly!</div>'; return; }
 
-  // Group by round
+  // Group by round — exclude pending (not yet open) matchups from public view
+  const visible = matchups.filter(m => m.status !== 'pending');
   const groups = {};
-  matchups.forEach(m => {
+  visible.forEach(m => {
     const key = m.tournament_id ? `t${m.tournament_id}_r${m.round_number ?? 'x'}` : 'standalone';
     if (!groups[key]) groups[key] = { label: getRoundLabel(m), matchups: [] };
     groups[key].matchups.push(m);
@@ -613,11 +616,12 @@ async function submitRoundSetup() {
 function renderAdminMatchups() {
   const el = document.getElementById('admin-matchup-list');
   if (!matchups.length) { el.innerHTML = '<div class="empty-state">No matchups.</div>'; return; }
+  const roundNames = {0:'Play-In',1:'R64',2:'R32',3:'S16',4:'E8',5:'F4',6:'Final'};
   el.innerHTML = matchups.map(m => `
     <div class="matchup-admin-row">
       <div class="matchup-admin-label">
         <strong>${m.player_a}</strong> vs <strong>${m.player_b}</strong>
-        <span style="color:var(--muted);font-size:0.72rem"> (${m.status}${m.round_number!=null?' · Rd '+m.round_number:''})</span>
+        <span style="color:var(--muted);font-size:0.72rem"> (${m.status} · ${roundNames[m.round_number] ?? 'Rd '+m.round_number})</span>
       </div>
       ${m.status !== 'settled' ? `
       <div class="odds-pair" style="display:flex;gap:5px;align-items:center;font-size:0.75rem">
@@ -625,10 +629,27 @@ function renderAdminMatchups() {
         B:<input type="number" id="ob-adm-${m.id}" value="${m.odds_b}" step="0.05" min="1.05"/>
         <button class="btn btn-ghost btn-sm" onclick="adminSetOdds(${m.id})">Set</button>
       </div>
+      <div style="display:flex;gap:5px;align-items:center;font-size:0.75rem">
+        Fix Rd:
+        <select id="fix-rd-${m.id}" style="padding:4px 6px;background:var(--card2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.75rem">
+          <option value="0" ${m.round_number===0?'selected':''}>Play-In</option>
+          <option value="1" ${m.round_number===1?'selected':''}>R64</option>
+          <option value="2" ${m.round_number===2?'selected':''}>R32</option>
+          <option value="3" ${m.round_number===3?'selected':''}>S16</option>
+          <option value="4" ${m.round_number===4?'selected':''}>E8</option>
+          <option value="5" ${m.round_number===5?'selected':''}>F4</option>
+          <option value="6" ${m.round_number===6?'selected':''}>Final</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="fixRound(${m.id})">Fix</button>
+      </div>
       ${m.status === 'open' ? `<button class="btn btn-warn btn-sm" onclick="lockMatchup(${m.id})">🔒 Lock</button>` : ''}
-      <button class="btn btn-success btn-sm" onclick="settleMatchup(${m.id},'A')">🏅 ${m.player_a.split(' ')[0]} Wins</button>
-      <button class="btn btn-success btn-sm" onclick="settleMatchup(${m.id},'B')">🏅 ${m.player_b.split(' ')[0]} Wins</button>
-      ` : `<span style="color:var(--accent2);font-size:0.78rem">✓ ${m.winner_name} won</span>`}
+      ${m.status !== 'pending' ? `
+        <button class="btn btn-success btn-sm" onclick="settleMatchup(${m.id},'A')">🏅 ${m.player_a.split(' ')[0]} Wins</button>
+        <button class="btn btn-success btn-sm" onclick="settleMatchup(${m.id},'B')">🏅 ${m.player_b.split(' ')[0]} Wins</button>
+      ` : '<span style="color:var(--muted);font-size:0.75rem">⏳ Waiting for play-in winners</span>'}
+      <button class="btn btn-danger btn-sm" onclick="deleteMatchup(${m.id})">🗑 Delete</button>
+      ` : `<span style="color:var(--accent2);font-size:0.78rem">✓ ${m.winner_name} won</span>
+      <button class="btn btn-danger btn-sm" onclick="deleteMatchup(${m.id})">🗑 Delete</button>`}
     </div>`).join('');
 }
 
@@ -636,6 +657,25 @@ async function lockMatchup(id) {
   await apiFetch(`/api/matchups/${id}/lock`, 'PATCH');
   toast('Betting locked!', 'success');
   await loadMatchups();
+}
+
+async function deleteMatchup(id) {
+  const m = matchups.find(x => x.id === id);
+  if (!confirm(`Delete matchup "${m?.player_a} vs ${m?.player_b}"? Any unsettled bets will be refunded.`)) return;
+  try {
+    await apiFetch(`/api/matchups/${id}`, 'DELETE');
+    toast('Matchup deleted & bets refunded.', 'success');
+    await loadMatchups();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function fixRound(id) {
+  const roundNum = parseInt(document.getElementById(`fix-rd-${id}`).value);
+  try {
+    await apiFetch(`/api/matchups/${id}/fix_round?round_number=${roundNum}`, 'PATCH');
+    toast('Round fixed!', 'success');
+    await loadMatchups();
+  } catch(e) { toast(e.message, 'error'); }
 }
 
 async function adminSetOdds(id) {
