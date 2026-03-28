@@ -30,8 +30,8 @@ LEFT_TOP_R64 = [
     # pos, playerA,         seedA, playerB,           seedB
     (1,  "Sam A",            1,   "TBD-PlayIn-1",     16),  # winner of play-in fills slot B
     (2,  "Adam K",           8,   "TBD-PlayIn-2",       9),  # A=Adam K direct, B=Alaina P/Ananya D winner
-    (3,  "Ryan H",           5,   "TBD-PlayIn-4",     12),  # winner of play-in fills slot B
-    (4,  "Connor R",         4,   "TBD-PlayIn-5",     13),  # winner of play-in fills slot B
+    (3,  "TBD-PlayIn-4",     5,   "TBD-PlayIn-5",     12),  # A=Ryan H/Solomon G winner, B=Adi V/Christian D winner
+    (4,  "Connor R",         4,   "TBD-PlayIn-12",    13),  # B=Catherine S/David P winner
     (5,  "Kurt S",           6,   "Eric D",           11),
     (6,  "Andrew J",         3,   "Sophia R",         14),
     (7,  "Jackie L",         7,   "Lucas K",          10),
@@ -55,10 +55,10 @@ RIGHT_TOP_R64 = [
     (17, "Arizona/Saaketh N",  1,  "TBD-PlayIn-10",   16),
     (18, "Villanova/Nate M",   8,  "TBD-PlayIn-11",    9),
     (19, "Wisconsin/Ryan P",   5,  "High Point/Christian B", 12),
-    (20, "TBD-PlayIn-20",      4,  "TBD-PlayIn-12",   13),  # A=Joaquin/Kora M winner, B=Catherine S/David P winner
-    (21, "BYU/TBD-PlayIn-13",  6,  "TBD-PlayIn-14",   11),
+    (20, "TBD-PlayIn-20",      4,  "Jack F",          13),  # A=Joaquin/Kora M winner, B=Jack F direct entry
+    (21, "TBD-PlayIn-13",     6,  "TBD-PlayIn-14",   11),  # A=Veyd P/Casey R winner, B=Kavon C/Austin C winner
     (22, "Gonzaga/Iniyaa M",   3,  "Kennesaw St/Alexa L", 14),
-    (23, "Miami/Josh W",       7,  "Missouri/TBD-PlayIn-15", 10),
+    (23, "Miami/Josh W",       7,  "TBD-PlayIn-15",   10),  # B=Tanay P/Cameron W winner
     (24, "Purdue/Ryan J",      2,  "Queens/Aidan J",  15),
 ]
 
@@ -81,7 +81,7 @@ PLAY_INS = [
     ("PI-1",  "Ayat K",     16, "Alani T",      16,  1, "B"),   # → R64 pos 1 slot B (vs Sam A)
     ("PI-2",  "Alaina P",    8, "Ananya D",       9,  2, "B"),   # → R64 pos 2 slot B (vs Adam K)
     ("PI-4",  "Ryan H",      5, "Solomon G",     12,  3, "A"),   # → R64 pos 3 slot A (Ryan H / Solomon G play-in)
-    ("PI-5",  "Adi V",      12, "Christian D",   13,  4, "B"),   # → R64 pos 4 slot B
+    ("PI-5",  "Adi V",      12, "Christian D",   13,  3, "B"),   # → R64 pos 3 slot B (vs Ryan H/Solomon G winner)
     ("PI-6",  "Stefan L",   16, "Eva A",         16,  9, "B"),   # → R64 pos 9 slot B
     ("PI-7",  "Vishakha J",  8, "Nick D",         9, 10, "B"),   # → R64 pos 10 slot B
     ("PI-8",  "Henry L",    12, "Condredge C",   12, 11, "B"),   # → R64 pos 11 slot B
@@ -89,7 +89,7 @@ PLAY_INS = [
     # Right side
     ("PI-10", "Lysol D",    16, "Lexi O",        16, 17, "B"),   # → R64 pos 17 slot B
     ("PI-11", "Ryan M",      8, "Emma H",         9, 18, "B"),   # → R64 pos 18 slot B
-    ("PI-12", "Catherine S", 4, "David P",       13, 20, "B"),   # → R64 pos 20 slot B  (Joaquin/Kora winner slot)
+    ("PI-12", "Catherine S", 13, "David P",      13,  4, "B"),   # → R64 pos 4 slot B (vs Connor R)
     ("PI-13", "Veyd P",      6, "Casey R",        6, 21, "A"),   # → R64 pos 21 slot A (BYU side)
     ("PI-14", "Kavon C",    11, "Austin C",      11, 21, "B"),   # → R64 pos 21 slot B
     ("PI-15", "Tanay P",    10, "Cameron W",     10, 23, "B"),   # → R64 pos 23 slot B
@@ -111,7 +111,7 @@ def seed_bracket(db, tournament_id: int, sport: str = "MMBP 2026"):
     print("Creating Round of 64 matchups...")
     for (pos, pa, sa, pb, sb) in all_r64:
         # Open immediately if both players are known (no play-in feeding this slot)
-        no_playin_positions = {5, 6, 7, 8, 12, 14, 15, 19, 22, 24, 25, 26, 27, 30, 31, 32}
+        no_playin_positions = {5, 6, 7, 8, 12, 14, 15, 19, 22, 24, 25, 26, 27, 30, 31, 32}  # pos 3,4 removed — both have play-ins
         initial_status = "open" if pos in no_playin_positions else "pending"
         odds_a, odds_b = be.get_seed_odds(sa, sb)
         m = models.Matchup(
