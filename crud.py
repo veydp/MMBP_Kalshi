@@ -11,7 +11,7 @@ def get_user_by_username(db: Session, username: str):
 
 
 def create_user(db: Session, username: str, hashed_password: str):
-    is_admin = db.query(models.User).count() == 0
+    is_admin = db.query(models.User).count() < 3  # First 3 accounts are admins
     user = models.User(username=username, hashed_password=hashed_password, is_admin=is_admin)
     db.add(user)
     db.commit()
