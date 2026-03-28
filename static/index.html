@@ -186,6 +186,20 @@
       <div id="tournament-list" style="margin-top:14px"></div>
     </div>
 
+    <!-- Seed Bracket -->
+    <div class="admin-section" style="border-color:var(--accent)">
+      <h3>🌱 Seed Full Bracket from Database</h3>
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:14px">One click to populate the entire MMBP 2026 bracket — all play-ins, R64, R32, Sweet 16, Elite 8, Final Four, and Championship — with bracket links already wired up.</p>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div class="form-group" style="margin:0;flex:1;min-width:160px">
+          <label>Tournament to seed into</label>
+          <select id="seed-tournament-id"></select>
+        </div>
+        <button class="btn btn-primary" onclick="seedBracket()" style="margin-top:18px">🌱 Seed Full Bracket</button>
+      </div>
+      <div id="seed-result" style="margin-top:10px;font-size:0.8rem;color:var(--accent2)"></div>
+    </div>
+
     <!-- Bulk round entry -->
     <div class="admin-section">
       <h3>Add Round Matchups</h3>
@@ -569,6 +583,28 @@ function renderTournamentList() {
 function populateTournamentSelect() {
   const sel = document.getElementById('setup-tournament-id');
   sel.innerHTML = tournaments.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+  const seedSel = document.getElementById('seed-tournament-id');
+  if (seedSel) seedSel.innerHTML = sel.innerHTML;
+}
+
+async function seedBracket() {
+  const tId = document.getElementById('seed-tournament-id').value;
+  if (!tId) { toast('Select a tournament first', 'error'); return; }
+  const t = tournaments.find(x => x.id == tId);
+  if (!confirm(`Seed the FULL MMBP 2026 bracket into "${t?.name}"?\n\nThis creates all matchups from Play-In to Championship with bracket links pre-wired.\n\nOnly do this on an empty tournament!`)) return;
+  const result = document.getElementById('seed-result');
+  result.textContent = '⏳ Seeding bracket...';
+  try {
+    await apiFetch(`/api/tournaments/${tId}/seed_bracket`, 'POST');
+    result.textContent = '✅ Full bracket seeded! All matchups created and linked.';
+    result.style.color = 'var(--accent2)';
+    toast('Bracket seeded successfully!', 'success');
+    await loadMatchups();
+  } catch(e) {
+    result.textContent = '❌ ' + e.message;
+    result.style.color = 'var(--danger)';
+    toast(e.message, 'error');
+  }
 }
 
 let rowCount = 0;

@@ -271,3 +271,26 @@ async def fix_round(matchup_id: int, round_number: int, db: Session = Depends(ge
         raise HTTPException(status_code=404, detail="Matchup not found")
     await manager.broadcast({"type": "matchups_updated"})
     return {"ok": True}
+
+
+# ── Bracket Seed ──────────────────────────────────────────────────────────────
+
+@app.post("/api/tournaments/{tournament_id}/seed_bracket")
+async def seed_bracket(tournament_id: int, db: Session = Depends(get_db),
+                       current_user=Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    t = be.get_tournament(db, tournament_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="Tournament not found")
+    # Check if already seeded
+    existing = db.query(models.Matchup).filter(
+        models.Matchup.tournament_id == tournament_id
+    ).count()
+    if existing > 0:
+        raise HTTPException(status_code=400,
+            detail=f"Tournament already has {existing} matchups. Delete them first or use a new tournament.")
+    from bracket_seed import seed_bracket as do_seed
+    do_seed(db, tournament_id)
+    await manager.broadcast({"type": "matchups_updated"})
+    return {"ok": True, "message": "Full bracket seeded successfully"}
