@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 
@@ -26,25 +26,54 @@ class Token(BaseModel):
     is_admin: bool
 
 
+# ── Tournament ────────────────────────────────────────────────────────────────
+
+class TournamentCreate(BaseModel):
+    name: str
+
+
+class TournamentOut(BaseModel):
+    id: int
+    name: str
+    current_round: int
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # ── Matchups ──────────────────────────────────────────────────────────────────
 
 class MatchupCreate(BaseModel):
     player_a: str
     player_b: str
+    seed_a: Optional[int] = None
+    seed_b: Optional[int] = None
     sport: str = "Sport"
     odds_a: float = Field(default=2.0, gt=1.0)
     odds_b: float = Field(default=2.0, gt=1.0)
+    tournament_id: Optional[int] = None
+    round_number: Optional[int] = None
+    bracket_position: Optional[int] = None
 
 
 class MatchupOut(BaseModel):
     id: int
     player_a: str
     player_b: str
+    seed_a: Optional[int]
+    seed_b: Optional[int]
     sport: str
     odds_a: float
     odds_b: float
     status: str
     winner: Optional[str]
+    winner_name: Optional[str]
+    tournament_id: Optional[int]
+    round_number: Optional[int]
+    bracket_position: Optional[int]
+    next_matchup_id: Optional[int]
     created_at: datetime
 
     class Config:
@@ -60,11 +89,28 @@ class OddsUpdate(BaseModel):
     odds_b: float = Field(gt=1.0)
 
 
+# ── Tournament Matchup Setup ──────────────────────────────────────────────────
+
+class TournamentMatchupEntry(BaseModel):
+    player_a: str
+    player_b: str
+    seed_a: Optional[int] = None
+    seed_b: Optional[int] = None
+    bracket_position: int
+
+
+class TournamentSetup(BaseModel):
+    tournament_id: int
+    round_number: int
+    sport: str = "MMBP 2026"
+    matchups: List[TournamentMatchupEntry]
+
+
 # ── Bets ──────────────────────────────────────────────────────────────────────
 
 class BetCreate(BaseModel):
     matchup_id: int
-    pick: str        # "A" or "B"
+    pick: str
     amount: float = Field(gt=0)
 
 

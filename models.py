@@ -1,14 +1,7 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
-import enum
-
-
-class MatchupStatus(str, enum.Enum):
-    open = "open"
-    closed = "closed"
-    settled = "settled"
 
 
 class User(Base):
@@ -24,19 +17,40 @@ class User(Base):
     bets = relationship("Bet", back_populates="user")
 
 
+class Tournament(Base):
+    __tablename__ = "tournaments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    current_round = Column(Integer, default=0)
+    status = Column(String, default="active")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    matchups = relationship("Matchup", back_populates="tournament")
+
+
 class Matchup(Base):
     __tablename__ = "matchups"
 
     id = Column(Integer, primary_key=True, index=True)
     player_a = Column(String, nullable=False)
     player_b = Column(String, nullable=False)
+    seed_a = Column(Integer, nullable=True)
+    seed_b = Column(Integer, nullable=True)
     sport = Column(String, default="Sport")
-    odds_a = Column(Float, default=2.0)   # decimal odds for player A
-    odds_b = Column(Float, default=2.0)   # decimal odds for player B
-    status = Column(String, default="open")  # open | closed | settled
+    odds_a = Column(Float, default=2.0)
+    odds_b = Column(Float, default=2.0)
+    status = Column(String, default="open")
     winner = Column(String, nullable=True)
+    winner_name = Column(String, nullable=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id"), nullable=True)
+    round_number = Column(Integer, nullable=True)
+    bracket_position = Column(Integer, nullable=True)
+    next_matchup_id = Column(Integer, ForeignKey("matchups.id"), nullable=True)
+    next_slot = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    tournament = relationship("Tournament", back_populates="matchups")
     bets = relationship("Bet", back_populates="matchup")
 
 
@@ -46,7 +60,7 @@ class Bet(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     matchup_id = Column(Integer, ForeignKey("matchups.id"), nullable=False)
-    pick = Column(String, nullable=False)   # "A" or "B"
+    pick = Column(String, nullable=False)
     amount = Column(Float, nullable=False)
     odds_at_bet = Column(Float, nullable=False)
     potential_payout = Column(Float, nullable=False)
