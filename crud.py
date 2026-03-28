@@ -19,6 +19,26 @@ def create_user(db: Session, username: str, hashed_password: str):
     return user
 
 
+def get_all_users(db: Session):
+    return db.query(models.User).order_by(models.User.created_at.asc()).all()
+
+
+def delete_user(db: Session, user_id: int, current_user_id: int):
+    """Delete a user and refund nothing — removes all their bets too."""
+    if user_id == current_user_id:
+        return False, "Cannot delete yourself"
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        return False, "User not found"
+    if user.is_admin:
+        return False, "Cannot delete an admin account"
+    # Delete their bets
+    db.query(models.Bet).filter(models.Bet.user_id == user_id).delete()
+    db.delete(user)
+    db.commit()
+    return True, "Deleted"
+
+
 # ── Matchups ──────────────────────────────────────────────────────────────────
 
 def get_all_matchups(db: Session):

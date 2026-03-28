@@ -235,6 +235,13 @@
       <button class="btn btn-primary" onclick="submitRoundSetup()" style="margin-top:10px;margin-left:8px">Create All Matchups</button>
     </div>
 
+    <!-- User Management -->
+    <div class="admin-section">
+      <h3>👥 Registered Users</h3>
+      <p style="font-size:0.78rem;color:var(--muted);margin-bottom:14px">View all accounts. Delete duplicates or anyone who shouldn't be here. Admins cannot be deleted.</p>
+      <div id="user-list"><div class="empty-state">Loading...</div></div>
+    </div>
+
     <!-- Bracket Linking -->
     <div class="admin-section">
       <h3>🔗 Link Play-In → Next Round Slot</h3>
@@ -331,6 +338,7 @@ async function initApp() {
       renderTournamentList();
       populateTournamentSelect();
       populateLinkSelects();
+      loadUsers();
     }
     addMatchupRow();
   } catch(e) { localStorage.removeItem('token'); token = null; }
@@ -778,6 +786,46 @@ function toast(msg, type='success') {
   window._tt = setTimeout(() => el.className='', 3500);
 }
 
+
+// ── User Management ──────────────────────────────────────────────────────────────
+async function loadUsers() {
+  const el = document.getElementById('user-list');
+  if (!el) return;
+  try {
+    const users = await apiFetch('/api/users');
+    if (!users.length) { el.innerHTML = '<div class="empty-state">No users yet.</div>'; return; }
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 80px 80px 80px 80px;gap:0;margin-bottom:6px">
+        <span style="font-size:0.72rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:1px">Username</span>
+        <span style="font-size:0.72rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:1px">Balance</span>
+        <span style="font-size:0.72rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:1px">Role</span>
+        <span style="font-size:0.72rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:1px">ID</span>
+        <span></span>
+      </div>
+      ${users.map(u => `
+        <div style="display:grid;grid-template-columns:1fr 80px 80px 80px 80px;gap:0;padding:9px 0;border-bottom:1px solid var(--border);align-items:center">
+          <span style="font-size:0.85rem;font-weight:${u.is_admin ? '700' : '400'}">${u.username}${u.id === currentUser.id ? ' <span style="color:var(--accent);font-size:0.7rem">(you)</span>' : ''}</span>
+          <span style="font-size:0.82rem;color:var(--accent2)">${u.balance.toFixed(0)}</span>
+          <span style="font-size:0.75rem;${u.is_admin ? 'color:var(--accent);font-weight:700' : 'color:var(--muted)'}">${u.is_admin ? '⚙️ Admin' : 'User'}</span>
+          <span style="font-size:0.75rem;color:var(--muted)">#${u.id}</span>
+          ${!u.is_admin && u.id !== currentUser.id
+            ? `<button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${u.username}')">Remove</button>`
+            : '<span></span>'
+          }
+        </div>`).join('')}
+      <div style="margin-top:10px;font-size:0.78rem;color:var(--muted)">${users.length} total accounts · ${users.filter(u=>u.is_admin).length} admins</div>
+    `;
+  } catch(e) { if (el) el.innerHTML = '<div class="empty-state">Could not load users.</div>'; }
+}
+
+async function deleteUser(userId, username) {
+  if (!confirm(`Remove "${username}"?\n\nThis deletes their account and all their bets. Their points will be gone.`)) return;
+  try {
+    await apiFetch(`/api/users/${userId}`, 'DELETE');
+    toast(`${username} removed.`, 'success');
+    loadUsers();
+  } catch(e) { toast(e.message, 'error'); }
+}
 
 // ── Bracket Linking ────────────────────────────────────────────────────────────
 function populateLinkSelects() {

@@ -294,3 +294,23 @@ async def seed_bracket(tournament_id: int, db: Session = Depends(get_db),
     do_seed(db, tournament_id)
     await manager.broadcast({"type": "matchups_updated"})
     return {"ok": True, "message": "Full bracket seeded successfully"}
+
+
+# ── User Management ───────────────────────────────────────────────────────────
+
+@app.get("/api/users", response_model=List[schemas.UserOut])
+def get_all_users(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    return crud.get_all_users(db)
+
+
+@app.delete("/api/users/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(get_db),
+                current_user=Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    ok, msg = crud.delete_user(db, user_id, current_user.id)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"ok": True}
