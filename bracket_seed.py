@@ -69,9 +69,9 @@ RIGHT_BOT_R64 = [
     (27, "Texas Tech/Violet M", 5, "Akron/Sara C",    12),
     (28, "TBD-PlayIn-18",      4,  "TBD-PlayIn-16",   13),  # A=William M/Kat M winner, B=Alex M/Ryan W winner
     (29, "Tennessee/Elise K",  6,  "TBD-PlayIn-17",   11),
-    (30, "Virginia/Chloe B",   3,  "Wright St/Thomas C", 14),
+    (30, "Virginia/Chloe B",   14,  "Wright St/Thomas C", 3),
     (31, "Kentucky/Orit S",    7,  "Santa Clara/York B", 10),
-    (32, "Iowa St/Lyndon G",   2,  "Tennessee St/Thomas D", 15),
+    (32, "Iowa St/Lyndon G",   15,  "Tennessee St/Thomas D", 2),
 ]
 
 # ── Play-In Games (Round 0) ───────────────────────────────────────────────────
