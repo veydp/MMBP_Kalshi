@@ -328,10 +328,21 @@ async def delete_bet(bet_id: int, db: Session = Depends(get_db),
                      current_user=Depends(get_current_user)):
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin only")
+    # Capture matchup_id BEFORE deleting the bet
+    bet = db.query(models.Bet).filter(models.Bet.id == bet_id).first()
+    if not bet:
+        raise HTTPException(status_code=404, detail="Bet not found")
+    matchup_id = bet.matchup_id
     ok, msg = crud.delete_bet(db, bet_id)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
-    # Recalculate odds after bet removed
-    bet_check = db.query(models.Bet).filter(models.Bet.id == bet_id).first()
-    await manager.broadcast({"type": "matchups_updated"})
+    # Recalculate odds now that bet volume has changed
+    new_odds_a, new_odds_b = recalculate_odds(db, matchup_id)
+    crud.update_odds(db, matchup_id, new_odds_a, new_odds_b)
+    await manager.broadcast({
+        "type": "odds_update",
+        "matchup_id": matchup_id,
+        "odds_a": new_odds_a,
+        "odds_b": new_odds_b,
+    })
     return {"ok": True, "message": msg}
