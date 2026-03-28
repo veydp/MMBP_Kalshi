@@ -383,7 +383,14 @@ function renderMarkets() {
     groups[key].matchups.push(m);
   });
 
-  container.innerHTML = Object.values(groups).map(g => `
+  // Sort groups so highest round (most recent) appears first
+  const sortedGroups = Object.entries(groups).sort((a, b) => {
+    const rA = a[1].matchups[0]?.round_number ?? -1;
+    const rB = b[1].matchups[0]?.round_number ?? -1;
+    return rB - rA;
+  }).map(e => e[1]);
+
+  container.innerHTML = sortedGroups.map(g => `
     <div class="round-section">
       <div class="round-label">${g.label}</div>
       <div class="matchup-grid">${g.matchups.map(m => cardHTML(m)).join('')}</div>
@@ -399,7 +406,16 @@ function getRoundLabel(m) {
   return `${tName} — ${roundNames[m.round_number] ?? `Round ${m.round_number}`}`;
 }
 
+function stripCollege(name) {
+  // Remove "College/Name" prefix, keep only the person's name
+  if (!name) return name;
+  const slash = name.indexOf('/');
+  return slash !== -1 ? name.substring(slash + 1) : name;
+}
+
 function cardHTML(m) {
+  const nameA = stripCollege(m.player_a);
+  const nameB = stripCollege(m.player_b);
   const pctA = (1/m.odds_a) / (1/m.odds_a + 1/m.odds_b) * 100;
   const statusCls = {open:'status-open',locked:'status-locked',settled:'status-settled'}[m.status] || '';
   const seedA = m.seed_a ? `<div class="player-seed">#${m.seed_a}</div>` : '';
@@ -408,15 +424,15 @@ function cardHTML(m) {
 
   let actionHTML = '';
   if (m.status === 'settled') {
-    actionHTML = `<div class="winner-badge">🏅 ${m.winner_name || (m.winner==='A'?m.player_a:m.player_b)} advances</div>`;
+    actionHTML = `<div class="winner-badge">🏅 ${stripCollege(m.winner_name || (m.winner==='A'?m.player_a:m.player_b))} advances</div>`;
   } else if (m.status === 'locked') {
     actionHTML = `<div class="winner-badge" style="color:var(--warn)">🔒 Betting Locked — Match in progress</div>`;
   } else {
     actionHTML = `
       <div class="bet-row">
         <input type="number" id="amt-${m.id}" placeholder="Points" min="1" step="1" oninput="updatePayout(${m.id})"/>
-        <button class="pick-btn" id="pa-${m.id}" onclick="selectPick(${m.id},'A')">${m.player_a.split('/')[0].split(' ')[0]}</button>
-        <button class="pick-btn" id="pb-${m.id}" onclick="selectPick(${m.id},'B')">${m.player_b.split('/')[0].split(' ')[0]}</button>
+        <button class="pick-btn" id="pa-${m.id}" onclick="selectPick(${m.id},'A')">${nameA.split(' ')[0]}</button>
+        <button class="pick-btn" id="pb-${m.id}" onclick="selectPick(${m.id},'B')">${nameB.split(' ')[0]}</button>
       </div>
       <button class="btn btn-primary bet-submit" onclick="placeBet(${m.id})">Place Bet</button>
       <div class="payout-hint" id="hint-${m.id}">Select a player & enter amount</div>`;
@@ -428,9 +444,9 @@ function cardHTML(m) {
       <span class="status-badge ${statusCls}">${m.status}</span>
     </div>
     <div class="matchup-vs">
-      <div class="player">${seedA}<div class="player-name">${m.player_a}</div><div class="player-odds" id="oa-${m.id}">${m.odds_a.toFixed(2)}x</div><div style="font-size:0.68rem;color:var(--muted)">${(100/m.odds_a).toFixed(1)}%</div></div>
+      <div class="player">${seedA}<div class="player-name">${nameA}</div><div class="player-odds" id="oa-${m.id}">${m.odds_a.toFixed(2)}x</div><div style="font-size:0.68rem;color:var(--muted)">${(100/m.odds_a).toFixed(1)}%</div></div>
       <div class="vs-badge">VS</div>
-      <div class="player">${seedB}<div class="player-name">${m.player_b}</div><div class="player-odds" id="ob-${m.id}">${m.odds_b.toFixed(2)}x</div><div style="font-size:0.68rem;color:var(--muted)">${(100/m.odds_b).toFixed(1)}%</div></div>
+      <div class="player">${seedB}<div class="player-name">${nameB}</div><div class="player-odds" id="ob-${m.id}">${m.odds_b.toFixed(2)}x</div><div style="font-size:0.68rem;color:var(--muted)">${(100/m.odds_b).toFixed(1)}%</div></div>
     </div>
     <div class="odds-bar"><div class="odds-bar-a" id="bar-${m.id}" style="width:${pctA.toFixed(1)}%"></div></div>
     ${actionHTML}
