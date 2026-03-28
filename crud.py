@@ -128,6 +128,48 @@ def create_bet(db: Session, user_id: int, bet: schemas.BetCreate):
     return db_bet
 
 
+def get_matchup_bets(db: Session, matchup_id: int):
+    """Return all bets for a matchup with username attached."""
+    bets = (
+        db.query(models.Bet, models.User.username)
+        .join(models.User, models.Bet.user_id == models.User.id)
+        .filter(models.Bet.matchup_id == matchup_id)
+        .order_by(models.Bet.created_at.desc())
+        .all()
+    )
+    result = []
+    for bet, username in bets:
+        result.append({
+            "id": bet.id,
+            "matchup_id": bet.matchup_id,
+            "username": username,
+            "pick": bet.pick,
+            "amount": bet.amount,
+            "odds_at_bet": bet.odds_at_bet,
+            "potential_payout": bet.potential_payout,
+            "settled": bet.settled,
+            "won": bet.won,
+            "created_at": bet.created_at,
+        })
+    return result
+
+
+def delete_bet(db: Session, bet_id: int):
+    """Delete a bet and refund the user if unsettled."""
+    bet = db.query(models.Bet).filter(models.Bet.id == bet_id).first()
+    if not bet:
+        return False, "Bet not found"
+    if bet.settled:
+        return False, "Cannot delete a settled bet"
+    # Refund the stake
+    user = db.query(models.User).filter(models.User.id == bet.user_id).first()
+    if user:
+        user.balance += bet.amount
+    db.delete(bet)
+    db.commit()
+    return True, "Deleted and refunded"
+
+
 def get_user_bets(db: Session, user_id: int):
     return (
         db.query(models.Bet)

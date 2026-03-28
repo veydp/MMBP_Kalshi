@@ -109,6 +109,16 @@
     .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent2); margin-right: 5px; animation: pulse 1.5s infinite; }
     @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
     .empty-state { text-align: center; padding: 50px 20px; color: var(--muted); font-size: 0.88rem; }
+    .bet-volume-toggle { font-size:0.72rem; color:var(--accent); cursor:pointer; text-decoration:underline; margin-top:6px; display:inline-block; }
+    .bet-volume-panel { margin-top:10px; background:var(--card2); border-radius:8px; padding:10px; display:none; }
+    .bet-volume-panel.open { display:block; }
+    .bet-volume-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid var(--border); font-size:0.78rem; }
+    .bet-volume-row:last-child { border-bottom:none; }
+    .bet-vol-name { font-weight:600; }
+    .bet-vol-pick-a { color:var(--accent); font-size:0.7rem; font-weight:700; }
+    .bet-vol-pick-b { color:var(--accent2); font-size:0.7rem; font-weight:700; }
+    .bet-vol-amount { color:var(--muted); }
+    .bet-vol-summary { display:flex; justify-content:space-between; font-size:0.75rem; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid var(--border); }
     .next-slot { font-size: 0.68rem; color: var(--muted); font-style: italic; }
   </style>
 </head>
@@ -459,6 +469,10 @@ function cardHTML(m) {
     <div class="odds-bar"><div class="odds-bar-a" id="bar-${m.id}" style="width:${pctA.toFixed(1)}%"></div></div>
     ${actionHTML}
     ${nextInfo}
+    <span class="bet-volume-toggle" onclick="toggleBetVolume(${m.id}, '${nameA}', '${nameB}')">📊 Show bets</span>
+    <div class="bet-volume-panel" id="vol-${m.id}">
+      <div style="text-align:center;font-size:0.75rem;color:var(--muted)">Loading...</div>
+    </div>
   </div>`;
 }
 
@@ -786,6 +800,73 @@ function toast(msg, type='success') {
   window._tt = setTimeout(() => el.className='', 3500);
 }
 
+
+// ── Bet Volume ────────────────────────────────────────────────────────────────────
+const betVolumeCache = {};
+
+async function toggleBetVolume(matchupId, nameA, nameB) {
+  const panel = document.getElementById(`vol-${matchupId}`);
+  const toggle = panel.previousElementSibling;
+  if (panel.classList.contains('open')) {
+    panel.classList.remove('open');
+    toggle.textContent = '📊 Show bets';
+    return;
+  }
+  panel.classList.add('open');
+  toggle.textContent = '📊 Hide bets';
+  panel.innerHTML = '<div style="text-align:center;font-size:0.75rem;color:var(--muted)">Loading...</div>';
+  try {
+    const bets = await apiFetch(`/api/matchups/${matchupId}/bets`);
+    betVolumeCache[matchupId] = bets;
+    renderBetVolume(matchupId, nameA, nameB, bets);
+  } catch(e) {
+    panel.innerHTML = '<div style="font-size:0.75rem;color:var(--danger)">Could not load bets.</div>';
+  }
+}
+
+function renderBetVolume(matchupId, nameA, nameB, bets) {
+  const panel = document.getElementById(`vol-${matchupId}`);
+  if (!panel) return;
+  if (!bets.length) {
+    panel.innerHTML = '<div style="font-size:0.75rem;color:var(--muted);text-align:center">No bets placed yet</div>';
+    return;
+  }
+  const totalA = bets.filter(b => b.pick === 'A').reduce((s, b) => s + b.amount, 0);
+  const totalB = bets.filter(b => b.pick === 'B').reduce((s, b) => s + b.amount, 0);
+  const total = totalA + totalB;
+  const isAdmin = currentUser?.is_admin;
+
+  panel.innerHTML = `
+    <div class="bet-vol-summary">
+      <span><span class="bet-vol-pick-a">▲ ${nameA}</span>: <strong>${totalA.toFixed(0)} pts</strong> (${total ? (totalA/total*100).toFixed(0) : 0}%)</span>
+      <span><span class="bet-vol-pick-b">▲ ${nameB}</span>: <strong>${totalB.toFixed(0)} pts</strong> (${total ? (totalB/total*100).toFixed(0) : 0}%)</span>
+    </div>
+    ${bets.map(b => `
+      <div class="bet-volume-row">
+        <span class="bet-vol-name">${b.username}</span>
+        <span class="${b.pick === 'A' ? 'bet-vol-pick-a' : 'bet-vol-pick-b'}">${b.pick === 'A' ? nameA : nameB}</span>
+        <span class="bet-vol-amount">${b.amount.toFixed(0)} pts @ ${b.odds_at_bet.toFixed(2)}x</span>
+        <span style="font-size:0.7rem;color:${b.settled ? (b.won ? 'var(--accent2)' : 'var(--danger)') : 'var(--muted)'}">${b.settled ? (b.won ? '✅ Won' : '❌ Lost') : '⏳'}</span>
+        ${isAdmin && !b.settled ? `<button class="btn btn-danger btn-sm" onclick="adminDeleteBet(${b.id}, ${matchupId}, '${nameA}', '${nameB}')">✕</button>` : ''}
+      </div>`).join('')}
+    <div style="font-size:0.72rem;color:var(--muted);margin-top:6px">${bets.length} bet${bets.length!==1?'s':''} · ${total.toFixed(0)} pts total volume</div>
+  `;
+}
+
+async function adminDeleteBet(betId, matchupId, nameA, nameB) {
+  if (!confirm('Delete this bet and refund the user?')) return;
+  try {
+    await apiFetch(`/api/bets/${betId}`, 'DELETE');
+    toast('Bet deleted and user refunded.', 'success');
+    // Refresh volume panel
+    const bets = await apiFetch(`/api/matchups/${matchupId}/bets`);
+    betVolumeCache[matchupId] = bets;
+    renderBetVolume(matchupId, nameA, nameB, bets);
+    // Refresh user balance
+    currentUser = await apiFetch('/api/me');
+    document.getElementById('nav-balance').textContent = currentUser.balance.toFixed(0);
+  } catch(e) { toast(e.message, 'error'); }
+}
 
 // ── User Management ──────────────────────────────────────────────────────────────
 async function loadUsers() {

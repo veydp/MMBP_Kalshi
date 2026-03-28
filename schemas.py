@@ -129,6 +129,22 @@ class BetOut(BaseModel):
         from_attributes = True
 
 
+class BetWithUser(BaseModel):
+    id: int
+    matchup_id: int
+    username: str
+    pick: str
+    amount: float
+    odds_at_bet: float
+    potential_payout: float
+    settled: bool
+    won: Optional[bool]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # ── Leaderboard ───────────────────────────────────────────────────────────────
 
 class LeaderboardEntry(BaseModel):

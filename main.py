@@ -314,3 +314,24 @@ def delete_user(user_id: int, db: Session = Depends(get_db),
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     return {"ok": True}
+
+
+# ── Matchup Bets (public volume + admin delete) ───────────────────────────────
+
+@app.get("/api/matchups/{matchup_id}/bets")
+def get_matchup_bets(matchup_id: int, db: Session = Depends(get_db)):
+    return crud.get_matchup_bets(db, matchup_id)
+
+
+@app.delete("/api/bets/{bet_id}")
+async def delete_bet(bet_id: int, db: Session = Depends(get_db),
+                     current_user=Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    ok, msg = crud.delete_bet(db, bet_id)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    # Recalculate odds after bet removed
+    bet_check = db.query(models.Bet).filter(models.Bet.id == bet_id).first()
+    await manager.broadcast({"type": "matchups_updated"})
+    return {"ok": True, "message": msg}
