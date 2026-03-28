@@ -40,6 +40,8 @@ class Matchup(Base):
     sport = Column(String, default="Sport")
     odds_a = Column(Float, default=2.0)
     odds_b = Column(Float, default=2.0)
+    initial_odds_a = Column(Float, default=2.0)  # original seed odds, never changes
+    initial_odds_b = Column(Float, default=2.0)
     status = Column(String, default="open")
     winner = Column(String, nullable=True)
     winner_name = Column(String, nullable=True)

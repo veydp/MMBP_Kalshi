@@ -55,7 +55,10 @@ def get_matchup(db: Session, matchup_id: int):
 
 
 def create_matchup(db: Session, matchup: schemas.MatchupCreate):
-    db_matchup = models.Matchup(**matchup.model_dump())
+    data = matchup.model_dump()
+    db_matchup = models.Matchup(**data)
+    db_matchup.initial_odds_a = data.get('odds_a', 2.0)
+    db_matchup.initial_odds_b = data.get('odds_b', 2.0)
     db.add(db_matchup)
     db.commit()
     db.refresh(db_matchup)
