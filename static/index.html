@@ -221,6 +221,37 @@
       <button class="btn btn-primary" onclick="submitRoundSetup()" style="margin-top:10px;margin-left:8px">Create All Matchups</button>
     </div>
 
+    <!-- Bracket Linking -->
+    <div class="admin-section">
+      <h3>🔗 Link Play-In → Next Round Slot</h3>
+      <p style="font-size:0.78rem;color:var(--muted);margin-bottom:14px">After creating both play-in and round of 64 matchups, use this to wire winners into their next slot automatically.</p>
+      <div style="display:grid;grid-template-columns:1fr auto 1fr auto 80px;gap:10px;align-items:end;flex-wrap:wrap">
+        <div class="form-group" style="margin:0">
+          <label>Play-In Matchup (source)</label>
+          <select id="link-source" onchange="updateLinkPreview()">
+            <option value="">-- Select play-in --</option>
+          </select>
+        </div>
+        <div style="padding-bottom:6px;color:var(--muted);font-size:1.2rem;font-weight:700">→</div>
+        <div class="form-group" style="margin:0">
+          <label>Round of 64 Matchup (destination)</label>
+          <select id="link-dest" onchange="updateLinkPreview()">
+            <option value="">-- Select R64 matchup --</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>Into Slot</label>
+          <select id="link-slot">
+            <option value="A">Player A slot</option>
+            <option value="B">Player B slot</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="linkMatchups()" style="margin-bottom:1px">Link</button>
+      </div>
+      <div id="link-preview" style="margin-top:12px;font-size:0.8rem;color:var(--accent2);min-height:18px"></div>
+      <div id="link-list" style="margin-top:16px"></div>
+    </div>
+
     <!-- Manage matchups -->
     <div class="admin-section">
       <h3>Manage Matchups</h3>
@@ -285,6 +316,7 @@ async function initApp() {
       renderAdminMatchups();
       renderTournamentList();
       populateTournamentSelect();
+      populateLinkSelects();
     }
     addMatchupRow();
   } catch(e) { localStorage.removeItem('token'); token = null; }
@@ -318,7 +350,7 @@ function connectWS() {
 async function loadMatchups() {
   matchups = await apiFetch('/api/matchups');
   renderMarkets();
-  if (currentUser?.is_admin) renderAdminMatchups();
+  if (currentUser?.is_admin) { renderAdminMatchups(); populateLinkSelects(); }
   await checkRoundStatus();
 }
 
@@ -654,6 +686,74 @@ function toast(msg, type='success') {
   window._tt = setTimeout(() => el.className='', 3500);
 }
 
+
+// ── Bracket Linking ────────────────────────────────────────────────────────────
+function populateLinkSelects() {
+  const playIns = matchups.filter(m => m.round_number === 0);
+  const r64 = matchups.filter(m => m.round_number === 1);
+  const srcSel = document.getElementById('link-source');
+  const dstSel = document.getElementById('link-dest');
+  if (!srcSel || !dstSel) return;
+
+  srcSel.innerHTML = '<option value="">-- Select play-in --</option>' +
+    playIns.map(m => `<option value="${m.id}">${m.player_a} vs ${m.player_b}${m.next_matchup_id ? ' ✅' : ''}</option>`).join('');
+
+  dstSel.innerHTML = '<option value="">-- Select R64 matchup --</option>' +
+    r64.map(m => `<option value="${m.id}">${m.player_a} vs ${m.player_b} (pos ${m.bracket_position})</option>`).join('');
+
+  renderLinkList(playIns);
+}
+
+function updateLinkPreview() {
+  const srcId = document.getElementById('link-source').value;
+  const dstId = document.getElementById('link-dest').value;
+  const slot = document.getElementById('link-slot').value;
+  const preview = document.getElementById('link-preview');
+  if (!srcId || !dstId) { preview.textContent = ''; return; }
+  const src = matchups.find(x => x.id == srcId);
+  const dst = matchups.find(x => x.id == dstId);
+  if (!src || !dst) return;
+  preview.textContent = `Winner of "${src.player_a} vs ${src.player_b}" → fills ${slot} slot in "${dst.player_a} vs ${dst.player_b}"`;
+}
+
+async function linkMatchups() {
+  const srcId = document.getElementById('link-source').value;
+  const dstId = document.getElementById('link-dest').value;
+  const slot = document.getElementById('link-slot').value;
+  if (!srcId || !dstId) { toast('Select both matchups', 'error'); return; }
+  try {
+    await apiFetch(`/api/matchups/link?matchup_id=${srcId}&next_matchup_id=${dstId}&next_slot=${slot}`, 'POST');
+    toast('Linked! Winner will auto-advance.', 'success');
+    await loadMatchups();
+    populateLinkSelects();
+    document.getElementById('link-preview').textContent = '';
+    document.getElementById('link-source').value = '';
+    document.getElementById('link-dest').value = '';
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function renderLinkList(playIns) {
+  const el = document.getElementById('link-list');
+  if (!el) return;
+  const linked = playIns.filter(m => m.next_matchup_id);
+  const unlinked = playIns.filter(m => !m.next_matchup_id);
+  if (!playIns.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div style="font-size:0.75rem;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">
+      Links (${linked.length}/${playIns.length} play-ins linked)
+    </div>
+    ${linked.map(m => {
+      const dst = matchups.find(x => x.id === m.next_matchup_id);
+      return `<div style="font-size:0.8rem;padding:6px 0;border-bottom:1px solid var(--border);color:var(--accent2)">
+        ✅ <strong>${m.player_a} vs ${m.player_b}</strong> → ${dst ? dst.player_a + ' vs ' + dst.player_b : 'Match #' + m.next_matchup_id} (slot ${m.next_slot || '?'})
+      </div>`;
+    }).join('')}
+    ${unlinked.length
+      ? `<div style="margin-top:10px;font-size:0.78rem;color:var(--warn)">⚠️ ${unlinked.length} play-in(s) not yet linked: ${unlinked.map(m => m.player_a + ' vs ' + m.player_b).join(', ')}</div>`
+      : '<div style="margin-top:8px;font-size:0.78rem;color:var(--accent2)">🎉 All play-ins linked!</div>'
+    }
+  `;
+}
 if (token) initApp();
 </script>
 </body>
